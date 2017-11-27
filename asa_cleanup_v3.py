@@ -83,6 +83,17 @@ class Item_Count:
                         count[i] += 1
         return count
 
+    def name(self):
+        count = {}
+        for i in self.list:
+            for line in self.config_file:
+                if i in line:
+                    if not i in count:
+                        count[i] = 1
+                    else:
+                        count[i] += 1
+        return count
+
 def create_list(config_file):
     """"Create lists for all objects, object_groups, acls and group-policies that exist within the provided configuration file"""
     
@@ -90,6 +101,7 @@ def create_list(config_file):
     object_groups = []
     acls = []
     gps = []
+    names = []
     
     for line in config_file:
     
@@ -114,8 +126,13 @@ def create_list(config_file):
                 continue
             elif not gp in gps:
                 gps.append(gp)
+
+        if line.startswith('name'):
+            name = (line.split()).pop(2)
+            if not name in names:
+                names.append(name)
     
-    return (objects, object_groups, acls, gps)
+    return (objects, object_groups, acls, gps, names)
 
 def create_item_remove(item_count):
     """Create list of items (e.g. group policies, ACLs, object-groups, objects) to be removed"""
@@ -147,7 +164,10 @@ def update_config_file_parse(item_remove, config_file, type):
         elif type == 'gp':
             for obj in parse.find_objects(r"^group-policy %s" %i):
                 obj.delete(r"^group-policy %s" %i)
-    
+
+        elif type == 'name':
+            for obj in parse.find_objects(r"^object-group network %s" %i):
+                obj.delete(r"^object %s" %i) 
     config_file_new = []
     
     for line in parse.ioscfg:
@@ -169,6 +189,8 @@ def create_conf(dict, type):
                 print ('clear configure access-list %s' % (i))
             elif type == 'gp':
                 print ('clear configure group-policy %s' % (i))
+            elif type == 'name':
+                print ('No Name %s' % (i))
 
 def main():
     """Start Main Program"""
@@ -180,7 +202,7 @@ def main():
         f.close()
     
         # Create lists of all items in config
-        objects, object_groups, acls, gps = create_list(config_file)
+        objects, object_groups, acls, gps, names = create_list(config_file)
     
         # Create dict(gp_count) of group policies(keys) with number of times each appear in config(values); 
         # Create list(gp_remove) of group policies to be removed; Update config file with group policies removed
@@ -199,6 +221,12 @@ def main():
         object_group_count = Item_Count(object_groups, config_file).obj()
         object_group_remove = create_item_remove(object_group_count)
         config_file = update_config_file_parse(object_group_remove, config_file, 'obg')
+
+
+
+        name_count = Item_Count(names, config_file).obj()
+        name_remove = create_item_remove(name_count)
+        config_file = update_config_file_parse(name_remove, config_file, 'name')
     
         # Create list of objects to remove    
         object_count = Item_Count(objects, config_file).obj()
@@ -215,6 +243,10 @@ def main():
         print ('\n')
         print ('ACL Removal Lines:')
         create_conf(acl_count, 'acl')  
+
+        print ('\n')
+        print ('Name Removal Lines:')
+        create_conf(name_count, 'name') 
     
         print ('\n')
         print ('Object-Group Removal Lines:')
